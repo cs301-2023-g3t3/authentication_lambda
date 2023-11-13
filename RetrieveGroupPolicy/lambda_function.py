@@ -11,12 +11,20 @@ import mysql.connector
 AWS_REGION = os.environ['AWS_REGION']
 COGNITO_USER_POOL_ID = os.environ['COGNITO_USER_POOL_ID']
 COGNITO_APP_CLIENT_ID = os.environ['COGNITO_APP_CLIENT_ID']
+COGNITO_APP_DEV_CLIENT_ID = os.environ['COGNITO_APP_DEV_CLIENT_ID']
 host = os.getenv('DB_URI')
 username = os.getenv('DB_USERNAME')
 password = os.getenv('DB_PASSWORD')
 database = os.getenv('DB_NAME')
 
 keys_url = 'https://cognito-idp.{}.amazonaws.com/{}/.well-known/jwks.json'.format(AWS_REGION, COGNITO_USER_POOL_ID)
+
+# instead of re-downloading the public keys every time
+# we download them only on cold start
+# https://aws.amazon.com/blogs/compute/container-reuse-in-lambda/
+with urllib.request.urlopen(keys_url) as f:
+    response = f.read()
+keys = json.loads(response.decode('utf-8'))['keys']
 
 conn = mysql.connector.connect(
     host = host,
@@ -25,12 +33,6 @@ conn = mysql.connector.connect(
     password = password
 )
 
-# instead of re-downloading the public keys every time
-# we download them only on cold start
-# https://aws.amazon.com/blogs/compute/container-reuse-in-lambda/
-with urllib.request.urlopen(keys_url) as f:
-    response = f.read()
-keys = json.loads(response.decode('utf-8'))['keys']
 
 
 def lambda_handler(event, context):
@@ -140,7 +142,7 @@ def validate_token(token):
         return False
 
     # and the Audience  (use claims['client_id'] if verifying an access token)
-    if claims['client_id'] != COGNITO_APP_CLIENT_ID:
+    if claims['client_id'] not in [COGNITO_APP_CLIENT_ID, COGNITO_APP_DEV_CLIENT_ID]:
         print('Token was not issued for this audience')
         return False
 
@@ -156,6 +158,7 @@ def generate_role_policy(role_id, gateway_arn):
     cursor = conn.cursor(dictionary=True)
     cursor.execute(f"select ap.endpoint from role_access ra join access_points ap on ra.ap_id = ap.id where role_id = {role_id}")
     endpoints = cursor.fetchall()
+    conn.commit()
     print(f"Access List: {endpoints}")
 
     # Generate access list

@@ -19,13 +19,16 @@ def lambda_handler(event, context):
     email = event['request']['userAttributes']['email']
 
     cursor = conn.cursor(dictionary=True)
-    cursor.execute(f"select * from users where email = '{email}' limit 1")
+    cursor.execute(f"select u.*, r.name from users u join roles r on u.role = r.id where email = '{email}' limit 1")
     results = cursor.fetchone()
+    conn.commit()
 
     if results:
 
         user_obj = dict(results)
         user_role = user_obj['role']
+        user_role_name = user_obj['name']
+        user_id = user_obj['id']
 
         print(f'User Role: {user_role}')
 
@@ -34,7 +37,8 @@ def lambda_handler(event, context):
         else:
             event["response"]["claimsOverrideDetails"] = { 
                 "claimsToAddOrOverride": { 
-                    "role": user_role,
+                    "role": user_role_name,
+                    "user_id": user_id,
                 },
                 "groupOverrideDetails": {
                     "groupsToOverride": [

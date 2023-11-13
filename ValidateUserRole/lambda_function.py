@@ -21,6 +21,8 @@ def lambda_handler(event, context):
     cursor = conn.cursor(dictionary=True)
     cursor.execute(f"select * from users where email = '{email}' limit 1")
     results = cursor.fetchone()
+    conn.commit()
+    
     if results:
 
         user_obj = dict(results)
